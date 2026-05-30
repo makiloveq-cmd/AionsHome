@@ -312,15 +312,23 @@ async def _ai_reply_to_moment(who: str, moment_id: str, target_comment_id: str =
                     continue
                 full_text += chunk
         else:
-            # Connor: 尝试 HTTP 服务，失败则用 CLI
+            # Connor: 尝试 HTTP 服务，失败则走配置模型
             result = await send_to_connor(messages[-1]["content"])
             if result and result != "__CONNOR_STILL_PROCESSING__":
                 full_text = result
             else:
-                async for chunk in stream_connor_cli(messages=messages):
-                    if chunk.startswith(CLI_STATUS_PREFIX):
-                        continue
-                    full_text += chunk
+                cfg = load_chatroom_config()
+                _connor_key = (cfg.get("connor_model") or "Codex").strip() or "Codex"
+                if _connor_key == "Codex":
+                    async for chunk in stream_connor_cli(messages=messages):
+                        if chunk.startswith(CLI_STATUS_PREFIX):
+                            continue
+                        full_text += chunk
+                else:
+                    async for chunk in stream_ai(messages, _connor_key, {}):
+                        if chunk.startswith(CLI_STATUS_PREFIX):
+                            continue
+                        full_text += chunk
     except Exception as e:
         print(f"[moments] AI 回复失败 ({who}): {e}")
         return
